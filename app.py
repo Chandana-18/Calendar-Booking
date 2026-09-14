@@ -385,7 +385,7 @@ elif page == "manage" and token:
 #  BOOK A SLOT (student - main page)
 # ════════════════════════════════════════════════════════════
 else:
-    st.markdown("## Book a Research Slot")
+    st.markdown("## 📅 Book an Office Hours Slot")
     st.markdown("Pick a date, choose an open time slot, and fill in your details.")
     st.divider()
 
@@ -448,23 +448,39 @@ else:
             else:
                 bid = str(uuid.uuid4())
                 tok = str(uuid.uuid4())
-                with get_db() as db:
-                    db.execute("""INSERT INTO bookings
-                        (id,name,email,course,instructor,slot_date,slot_hour,token,created_at)
-                        VALUES (?,?,?,?,?,?,?,?,?)""",
-                        (bid, name.strip(), email.strip(), course, instr,
-                         date_str, selected_hour, tok, datetime.now().isoformat()))
-                    db.commit()
+                booked_ok = False
+                try:
+                    # Lock the DB row to prevent two people booking the same slot simultaneously
+                    conn = sqlite3.connect(DB, check_same_thread=False, timeout=10)
+                    conn.isolation_level = "EXCLUSIVE"
+                    cur = conn.cursor()
+                    cur.execute(
+                        "SELECT COUNT(*) FROM bookings WHERE slot_date=? AND slot_hour=? AND status='confirmed'",
+                        (date_str, selected_hour))
+                    if cur.fetchone()[0] >= SEATS:
+                        conn.close()
+                        st.error("⚠️ That slot just filled up — please pick another time.")
+                    else:
+                        cur.execute("""INSERT INTO bookings
+                            (id,name,email,course,instructor,slot_date,slot_hour,token,created_at)
+                            VALUES (?,?,?,?,?,?,?,?,?)""",
+                            (bid, name.strip(), email.strip(), course, instr,
+                             date_str, selected_hour, tok, datetime.now().isoformat()))
+                        conn.commit()
+                        conn.close()
+                        booked_ok = True
+                except Exception as e:
+                    st.error(f"Booking error — please try again.")
+                    print(f"[BOOKING ERROR] {e}")
 
-                b = get_by_token(tok)
-                base_url   = st.secrets.get("APP_URL", "https://your-app.streamlit.app")
-                manage_url = f"{base_url}?page=manage&token={tok}"
-
-                mail_confirm(b, manage_url)
-                mail_lab(b, "new")
-
-                st.session_state.selected_hour = None
-                st.success(f"✅ Booking confirmed for {slot_label(selected_hour)} on {date_str}!")
-                st.info(f"Confirmation sent to **{email}**. Check your inbox (and spam).")
-                st.markdown(f"🔗 **Your manage link:** [Click here to manage your booking]({manage_url})")
-                st.markdown(f"*(Save this link to edit or cancel your booking later)*")
+                if booked_ok:
+                    b = get_by_token(tok)
+                    base_url   = st.secrets.get("APP_URL", "https://your-app.streamlit.app")
+                    manage_url = f"{base_url}?page=manage&token={tok}"
+                    mail_confirm(b, manage_url)
+                    mail_lab(b, "new")
+                    st.session_state.selected_hour = None
+                    st.success(f"✅ Booking confirmed for {slot_label(selected_hour)} on {date_str}!")
+                    st.info(f"📧 Confirmation sent to **{email}**. Check your inbox (and spam).")
+                    st.markdown(f"🔗 **Your manage link:** [Click here to manage your booking]({manage_url})")
+                    st.markdown(f"*(Save this link to edit or cancel your booking later)*")
