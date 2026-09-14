@@ -1,6 +1,7 @@
 import streamlit as st
 import sqlite3, uuid, smtplib, threading, os
 from datetime import datetime, date
+from apscheduler.schedulers.background import BackgroundScheduler
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 
@@ -14,7 +15,7 @@ st.set_page_config(
 # ── Config ─────────────────────────────────────────────────
 COURSES        = ["BTM 2000", "BTM 3850"]
 INSTRUCTORS    = ["Tracy G", "Kerry G", "Sandip S"]
-SLOT_HOURS     = list(range(10, 15))   # 10 AM – 2 PM start (ends 3 PM)
+SLOT_HOURS     = list(range(10, 16))   # 10 AM – 3 PM start (ends 4 PM)
 SEATS          = 3
 ADMIN_PASSWORD = st.secrets.get("ADMIN_PASSWORD", "labadmin123")
 SMTP_USER      = st.secrets.get("SMTP_USER", "")
@@ -131,7 +132,45 @@ def mail_cancel(b):
             f' at <b>{lbl}</b> has been cancelled.</p></div>')
     send_email(b["email"], "Office Hours — Booking Cancelled", html)
 
-# ── CSS ────────────────────────────────────────────────────
+def mail_reminder(b):
+    lbl  = slot_label(b["slot_hour"])
+    html = (f'<div style="font-family:sans-serif;max-width:500px;margin:0 auto">'
+            f'<h2 style="color:#D97706">⏰ Reminder: Your Slot is in 1 Hour</h2>'
+            f'<p>Hi <b>{b["name"]}</b>, your office-hours session starts in <b>1 hour</b>.</p>'
+            f'<p>📅 <b>{b["slot_date"]}</b> at <b>{lbl}</b>'
+            f' with <b>{b["instructor"]}</b></p></div>')
+    send_email(b["email"], "Reminder — Office Hours in 1 Hour", html)
+
+# ── Reminder scheduler (runs every 5 min) ─────────────────
+def check_reminders():
+    now = datetime.now()
+    try:
+        with get_db() as c:
+            rows = c.execute(
+                "SELECT * FROM bookings WHERE status='confirmed' AND reminder_sent=0"
+            ).fetchall()
+        for r in rows:
+            b = dict(r)
+            slot_dt = datetime.strptime(
+                f"{b['slot_date']} {b['slot_hour']}:00", "%Y-%m-%d %H:%M")
+            diff = (slot_dt - now).total_seconds()
+            if 0 < diff <= 3600:
+                mail_reminder(b)
+                with get_db() as c:
+                    c.execute("UPDATE bookings SET reminder_sent=1 WHERE id=?", (b["id"],))
+                    c.commit()
+                print(f"[REMINDER] Sent to {b['name']}")
+    except Exception as e:
+        print(f"[REMINDER ERROR] {e}")
+
+# Start scheduler once per session
+if "scheduler_started" not in st.session_state:
+    _sched = BackgroundScheduler()
+    _sched.add_job(check_reminders, "interval", minutes=5)
+    _sched.start()
+    st.session_state.scheduler_started = True
+
+# ── CSS ────────────────────────────────────────────────────────
 st.markdown("""
 <style>
 .stApp { max-width: 860px; margin: 0 auto; }
@@ -346,7 +385,7 @@ elif page == "manage" and token:
 #  BOOK A SLOT (student - main page)
 # ════════════════════════════════════════════════════════════
 else:
-    st.markdown("## 📅 Book an Office Hours Slot")
+    st.markdown("## Book a Research Slot")
     st.markdown("Pick a date, choose an open time slot, and fill in your details.")
     st.divider()
 
@@ -426,6 +465,6 @@ else:
 
                 st.session_state.selected_hour = None
                 st.success(f"✅ Booking confirmed for {slot_label(selected_hour)} on {date_str}!")
-                st.info(f"📧 Confirmation sent to **{email}**. Check your inbox (and spam).")
+                st.info(f"Confirmation sent to **{email}**. Check your inbox (and spam).")
                 st.markdown(f"🔗 **Your manage link:** [Click here to manage your booking]({manage_url})")
                 st.markdown(f"*(Save this link to edit or cancel your booking later)*")
