@@ -1,2 +1,4 @@
 streamlit
+gspread
+google-auth
 apscheduler
