@@ -8,7 +8,7 @@ from apscheduler.schedulers.background import BackgroundScheduler
 
 # ── Page config ────────────────────────────────────────────
 st.set_page_config(
-    page_title="Office Hours Booker",
+    page_title="Book your one hour research slot at DS 106",
     page_icon="📅",
     layout="centered"
 )
