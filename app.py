@@ -33,19 +33,17 @@ SCOPES = [
     "https://www.googleapis.com/auth/drive"
 ]
 
+SHEET_ID = "1PDJ0mTy6SsZC70S25FaNjcWPOAGxveAormAVN7QLcyM"
+
 @st.cache_resource
 def get_sheet():
     creds = Credentials.from_service_account_info(
         st.secrets["gcp_service_account"], scopes=SCOPES)
     client = gspread.authorize(creds)
-    try:
-        sh = client.open(SHEET_NAME)
-    except gspread.SpreadsheetNotFound:
-        sh = client.create(SHEET_NAME)
-        sh.share(None, perm_type="anyone", role="writer")
+    sh = client.open_by_key(SHEET_ID)
     ws = sh.sheet1
     # Add headers if sheet is empty
-    if ws.row_count == 0 or ws.cell(1, 1).value != "id":
+    if not ws.get_all_values() or ws.cell(1, 1).value != "id":
         ws.clear()
         ws.append_row([
             "id", "name", "email", "course", "instructor",
