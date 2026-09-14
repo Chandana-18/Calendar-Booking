@@ -422,7 +422,7 @@ elif page == "manage" and token:
 #  BOOK A SLOT (main page)
 # ════════════════════════════════════════════════════════════
 else:
-    st.markdown("## 📅 Book an Office Hours Slot")
+    st.markdown("## 📅 Book your one hour research slot at DS 106")
     st.markdown("Pick a date, choose an open time slot, and fill in your details.")
     st.divider()
 
